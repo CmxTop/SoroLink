@@ -10,4 +10,15 @@ describe("FixedWindowRateLimiter", () => {
     now = 1_001;
     expect(limiter.consume("run:client", 1).allowed).toBe(true);
   });
+
+  it("fails closed at key capacity without evicting an active client's quota", () => {
+    let now = 0;
+    const limiter = new FixedWindowRateLimiter(1_000, 1, () => now);
+    expect(limiter.consume("client-a", 1).allowed).toBe(true);
+    expect(limiter.consume("client-b", 1)).toMatchObject({ allowed: false, remaining: 0, retryAfterSeconds: 1 });
+    expect(limiter.consume("client-a", 1).allowed).toBe(false);
+
+    now = 1_001;
+    expect(limiter.consume("client-b", 1).allowed).toBe(true);
+  });
 });

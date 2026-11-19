@@ -78,7 +78,7 @@ describe("Stellar result-code normalization", () => {
     const error = horizonError("tx_failed", ["op_no_trust"], secret);
     const normalized = normalizeStellarError(error, "send-testusd").report;
     expect(normalized).toMatchObject({
-      code: "STELLAR_TRANSACTION_FAILED",
+      code: "STELLAR_TRUSTLINE_NOT_FOUND",
       category: "stellar",
       retryable: false,
       failedStepId: "send-testusd",
@@ -86,6 +86,21 @@ describe("Stellar result-code normalization", () => {
       stellarOperationCodes: ["op_no_trust"],
     });
     expect(JSON.stringify(normalized)).not.toContain(secret);
+  });
+
+  it("maps raw Stellar result codes to stable SoroLink codes and preserves protocol details", () => {
+    const trustlineError = normalizeStellarError(horizonError("tx_failed", ["op_no_trust"]), "send-testusd").report;
+    expect(trustlineError).toMatchObject({
+      code: "STELLAR_TRUSTLINE_NOT_FOUND",
+      stellarTransactionCode: "tx_failed",
+      stellarOperationCodes: ["op_no_trust"],
+    });
+
+    const sequenceError = normalizeStellarError(horizonError("tx_bad_seq", []), "send-xlm").report;
+    expect(sequenceError).toMatchObject({ code: "STELLAR_BAD_SEQUENCE", stellarTransactionCode: "tx_bad_seq" });
+
+    const unknownError = normalizeStellarError(horizonError("tx_future_code", ["op_future_code"]), "send-xlm").report;
+    expect(unknownError).toMatchObject({ code: "STELLAR_TRANSACTION_FAILED", stellarTransactionCode: "tx_future_code" });
   });
 });
 

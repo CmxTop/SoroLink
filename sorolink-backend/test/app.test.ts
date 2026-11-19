@@ -329,7 +329,7 @@ describe("SoroLink API", () => {
           message: "Stellar rejected the payment.",
         });
         throw new SafeRunError({
-          code: "STELLAR_TRANSACTION_FAILED",
+          code: "STELLAR_INSUFFICIENT_BALANCE",
           message: "Stellar rejected the payment.",
           category: "stellar",
           retryable: false,
@@ -349,7 +349,7 @@ describe("SoroLink API", () => {
       expect(report.steps).toHaveLength(2);
       expect(report.summary).toMatchObject({ stepsPassed: 1, stepsFailed: 1 });
       expect(report.error).toMatchObject({
-        code: "STELLAR_TRANSACTION_FAILED",
+        code: "STELLAR_INSUFFICIENT_BALANCE",
         failedStepId: "send-xlm",
         stellarOperationCodes: ["op_underfunded"],
       });
@@ -390,6 +390,8 @@ describe("SoroLink API", () => {
     const limited = await app.inject({ method: "POST", url: "/api/v1/runs", payload: { scenarioId: "xlm-payment" } });
     expect(limited.statusCode).toBe(429);
     expect(limited.json().error.code).toBe("RATE_LIMITED");
+    expect(limited.headers["x-ratelimit-limit"]).toBe("1");
+    expect(limited.headers["retry-after"]).toBeTruthy();
   });
 
   // ── Issue #76: run retention metadata ────────────────────────────────────

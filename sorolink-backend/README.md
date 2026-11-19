@@ -37,6 +37,15 @@ and concurrent execution to two runs. Request rates, in-memory retention, body
 size, and concurrency are configurable through the bounded values documented in
 `.env.example`.
 
+Run reports are retained in memory for `RUN_RETENTION_MS` (one hour by default),
+with a hard `MAX_STORED_RUNS` limit (500 by default). Expired terminal reports
+are removed on access; when the store is full, the earliest-completed terminal
+report is evicted before an active report. If all stored reports are active,
+new runs are rejected with `RUNNER_AT_CAPACITY`. Run-creation requests have a
+separate fixed-window per-IP limit (`RUN_RATE_LIMIT_MAX`, 10 by default); the
+window is configured by `RATE_LIMIT_WINDOW_MS` (60 seconds by default).
+Rate-limited responses return HTTP 429 and include `Retry-After`.
+
 ## Initial endpoints
 
 - `GET /health`
@@ -93,6 +102,9 @@ Bundled scenarios are declarative files in `scenarios/`. Set
 or submit a definition directly to `/api/v1/runs/definitions`. Definitions are
 validated before account generation or network access. See
 `../sorolink-docs/SCENARIOS.md` and `/openapi.json` for Schema v1 and API details.
+Run reports expose stable SoroLink `error.code` values for recognized Stellar
+failures while retaining raw protocol codes in `stellarTransactionCode` and
+`stellarOperationCodes`.
 
 Run the opt-in live smoke test only when real Testnet access is intended:
 

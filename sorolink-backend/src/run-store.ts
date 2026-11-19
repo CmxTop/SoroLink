@@ -27,9 +27,9 @@ export class InMemoryRunStore implements RunStore {
   create(run: RunReport): void {
     this.removeExpired();
     while (this.#runs.size >= this.maxEntries) {
-      const terminal = [...this.#runs.entries()].find(([, candidate]) => isTerminal(candidate));
-      if (!terminal) throw new RunCapacityError("The run store is full with active runs. Try again later.");
-      this.#runs.delete(terminal[0]);
+      const oldestTerminal = this.oldestTerminalRun();
+      if (!oldestTerminal) throw new RunCapacityError("The run store is full with active runs. Try again later.");
+      this.#runs.delete(oldestTerminal);
     }
     this.#runs.set(run.id, structuredClone(run));
   }
@@ -55,6 +55,21 @@ export class InMemoryRunStore implements RunStore {
       const terminalAt = run.completedAt ? Date.parse(run.completedAt) : Number.NaN;
       if (isTerminal(run) && Number.isFinite(terminalAt) && terminalAt <= cutoff) this.#runs.delete(id);
     }
+  }
+
+  private oldestTerminalRun(): string | undefined {
+    let oldestId: string | undefined;
+    let oldestCompletedAt = Number.POSITIVE_INFINITY;
+    for (const [id, run] of this.#runs) {
+      if (!isTerminal(run)) continue;
+      const completedAt = run.completedAt ? Date.parse(run.completedAt) : Number.NaN;
+      const timestamp = Number.isFinite(completedAt) ? completedAt : Number.NEGATIVE_INFINITY;
+      if (timestamp < oldestCompletedAt) {
+        oldestId = id;
+        oldestCompletedAt = timestamp;
+      }
+    }
+    return oldestId;
   }
 }
 
