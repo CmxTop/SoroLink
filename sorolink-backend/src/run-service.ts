@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { LedgerGateway, RunError, RunReport, RunSummary, ValidatedScenario } from "./domain.js";
 import type { RunStore } from "./run-store.js";
-import { RunCapacityError, RunTimeoutError, SafeRunError, ShutdownError, RunAlreadyTerminalError, RunNotFoundError, withTimeout } from "./errors.js";
+import { RunCapacityError, RunTimeoutError, SafeRunError, ShutdownError, withTimeout } from "./errors.js";
+import { isStableStellarErrorCode } from "./stellar-error-interpreter.js";
 
 const emptySummary = (): RunSummary => ({
   stepsPassed: 0,
@@ -261,7 +262,9 @@ export class RunService {
       const steps = currentRun?.steps ?? [];
       const assertions = currentRun?.assertions ?? [];
       const normalizedError = normalizeError(error);
-      errorCode = SAFE_RUN_ERROR_CODES.has(normalizedError.code) ? normalizedError.code : "INTERNAL_ERROR";
+      errorCode = SAFE_RUN_ERROR_CODES.has(normalizedError.code) || isStableStellarErrorCode(normalizedError.code)
+        ? normalizedError.code
+        : "INTERNAL_ERROR";
       await this.store.update(id, {
         status: "failed",
         completedAt: new Date(this.now()).toISOString(),

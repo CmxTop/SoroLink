@@ -27,7 +27,7 @@ import {
   StepTimeoutError,
   withTimeout,
 } from "./errors.js";
-import { interpretOperationCode, interpretTransactionCode, isStellarErrorRetryable } from "./stellar-error-interpreter.js";
+import { interpretOperationCode, interpretTransactionCode, isStellarErrorRetryable, normalizeStellarResultCode } from "./stellar-error-interpreter.js";
 import { isTextMemo } from "./text-memo.js";
 
 export type { FriendbotRetryConfig };
@@ -642,7 +642,7 @@ export function normalizeStellarError(error: unknown, failedStepId: string): Saf
     const firstOpCode = codes.operationCodes[0];
     const opSummary = firstOpCode ? ` ${interpretOperationCode(firstOpCode).summary}.` : "";
     const message = `Stellar rejected step ${failedStepId}: ${txInterpretation.summary}.${opSummary}`;
-    return new SafeRunError({ code: "STELLAR_TRANSACTION_FAILED", message, category: "stellar", retryable, failedStepId, stellarTransactionCode: codes.transactionCode, stellarOperationCodes: codes.operationCodes });
+    return new SafeRunError({ code: normalizeStellarResultCode(codes.transactionCode, codes.operationCodes), message, category: "stellar", retryable, failedStepId, stellarTransactionCode: codes.transactionCode, stellarOperationCodes: codes.operationCodes });
   }
   return new SafeRunError({ code: "NETWORK_UNAVAILABLE", message: `Stellar network execution failed during step ${failedStepId}. Internal details were removed.`, category: "network", retryable: true, failedStepId });
 }

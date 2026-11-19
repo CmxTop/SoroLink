@@ -192,6 +192,21 @@ describe("Issue #70 — GET /api/v1/schemas/scenario-v1.json", () => {
     expect(openapi.json().paths).toHaveProperty("/api/v1/schemas/scenario-v1.json");
   });
 
+  it("publishes run, error, and rate-limit response contracts in OpenAPI 3.1", async () => {
+    const app = createApp();
+    const response = await app.inject({ method: "GET", url: "/openapi.json" });
+    const document = response.json();
+
+    expect(document.openapi).toBe("3.1.0");
+    expect(document.components.schemas).toHaveProperty("RunReport");
+    expect(document.components.schemas).toHaveProperty("ApiErrorEnvelope");
+    expect(document.components.schemas).toHaveProperty("StellarErrorCode");
+    expect(document.paths["/api/v1/runs"].post.responses["202"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/RunReport");
+    expect(document.paths["/api/v1/runs"].post.responses["429"].content["application/json"].schema.$ref)
+      .toBe("#/components/schemas/ApiErrorEnvelope");
+  });
+
   it("does not accept mutation methods (POST, PUT, DELETE)", async () => {
     const app = createApp();
     for (const method of ["POST", "PUT", "DELETE"] as const) {
