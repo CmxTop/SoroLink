@@ -92,7 +92,7 @@ export const runReportSchemaV1 = {
       additionalProperties: false,
       required: ["code", "message", "category", "retryable"],
       properties: {
-        code: { type: "string", minLength: 1 },
+        code: { type: "string", minLength: 1, description: "Stable SoroLink error code. Recognized Stellar results use the documented STELLAR_* codes; raw Horizon codes are retained in the stellarTransactionCode and stellarOperationCodes fields." },
         message: { type: "string" },
         category: { enum: ["stellar", "network", "timeout", "capacity", "validation", "internal"] },
         retryable: { type: "boolean" },

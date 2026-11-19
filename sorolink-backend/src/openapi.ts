@@ -1,4 +1,5 @@
 import { scenarioSchemaV1 } from "./scenario-schema.js";
+import { runReportSchemaV1 } from "./report-schema.js";
 
 const runRequestSchema = {
   type: "object",
@@ -30,8 +31,9 @@ export function openApiDocument() {
     info: { title: "SoroLink API", version: "1.0.0", description: "Bounded declarative Stellar Testnet scenario execution." },
     servers: [{ url: "/" }],
     paths: {
-      "/health": { get: { operationId: "getHealth", responses: { "200": { description: "Healthy" } } } },
-      "/ready": { get: { operationId: "getReadiness", responses: { "200": { description: "Ready" }, "503": { description: "Database unavailable" } } } },
+      "/health": { get: { operationId: "getHealth", responses: { "200": { description: "Healthy", content: { "application/json": { schema: { type: "object", required: ["status", "network"], properties: { status: { const: "ok" }, network: { const: "testnet" } } } } } } } } },
+      "/metrics": { get: { operationId: "getMetrics", description: "Optional Prometheus text-format process metrics, available only when METRICS_ENABLED=true.", responses: { "200": { description: "Prometheus metrics", content: { "text/plain": { schema: { type: "string" } } } }, "404": { description: "Metrics are disabled" } } } },
+      "/ready": { get: { operationId: "getReadiness", responses: { "200": { description: "Ready", content: { "application/json": { schema: { type: "object", required: ["status", "network", "database"], properties: { status: { const: "ready" }, network: { const: "testnet" }, database: { enum: ["disabled", "ready"] } } } } } }, "503": { description: "Database unavailable", content: { "application/json": { schema: { type: "object", required: ["status", "network", "database"], properties: { status: { const: "unavailable" }, network: { const: "testnet" }, database: { const: "unavailable" } } } } } } } } },
       "/api/v1/scenarios": {
         get: {
           operationId: "listScenarios",
@@ -39,6 +41,7 @@ export function openApiDocument() {
           responses: {
             "200": {
               description: "Scenario catalogue",
+              content: { "application/json": { schema: { type: "object", required: ["items"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/ScenarioSummary" } } } } } },
               headers: {
                 "ETag": { schema: { type: "string" }, description: "Deterministic fingerprint of the catalogue contents. Changes whenever a version number or content hash changes." },
                 "Cache-Control": { schema: { type: "string" }, description: "Cache revalidation directive." },
@@ -48,7 +51,7 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/v1/scenarios/{scenarioId}": { get: { operationId: "getScenario", parameters: [{ name: "scenarioId", in: "path", required: true, schema: { type: "string" } }], responses: { "200": { description: "Scenario definition", content: { "application/json": { schema: { $ref: "#/components/schemas/ScenarioV1" } } } }, "404": { description: "Not found" } } } },
+      "/api/v1/scenarios/{scenarioId}": { get: { operationId: "getScenario", parameters: [{ name: "scenarioId", in: "path", required: true, schema: { type: "string" } }], responses: { "200": { description: "Scenario definition", content: { "application/json": { schema: { $ref: "#/components/schemas/ScenarioV1" } } } }, "404": { description: "Not found", ...apiErrorContent } } } },
       "/api/v1/schemas/scenario-v1.json": {
         get: {
           operationId: "getScenarioSchemaV1",
@@ -77,16 +80,18 @@ export function openApiDocument() {
           },
         },
       },
-      "/api/v1/scenarios/validate": { post: { operationId: "validateScenario", requestBody: definitionBody(), responses: { "200": { description: "Validated scenario and content hash" }, "400": { description: "Invalid scenario" }, "415": { description: "UNSUPPORTED_MEDIA_TYPE — Content-Type is not application/json, application/yaml, application/x-yaml, or text/yaml (issue #77)" } } } },
-      "/api/v1/scenarios/{scenarioId}/versions": { get: { operationId: "listScenarioVersions", description: "Rejects unknown query parameters, duplicate query keys, and non-integer-text limit/cursor values (decimals, scientific notation, empty strings) with 400 INVALID_REQUEST (issue #78).", parameters: [scenarioIdParameter, { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } }, { name: "cursor", in: "query", schema: { type: "integer", minimum: 1 } }], responses: { "200": { description: "Bounded immutable version history" }, "400": { description: "INVALID_REQUEST — malformed scenarioId, limit, or cursor, or unknown query parameter" }, "503": { description: "Persistence not enabled or unavailable" } } } },
-      "/api/v1/scenarios/{scenarioId}/versions/{version}": { get: { operationId: "getScenarioVersion", description: "Rejects a non-integer-text version path segment with 400 INVALID_REQUEST (issue #78).", parameters: [scenarioIdParameter, versionParameter], responses: { "200": { description: "Exact immutable scenario version", content: { "application/json": { schema: { $ref: "#/components/schemas/ScenarioV1" } } } }, "400": { description: "INVALID_REQUEST — malformed scenarioId or version" }, "404": { description: "Not found" } } } },
-      "/api/v1/scenarios/{scenarioId}/versions/{version}/export": { get: { operationId: "exportScenarioVersion", description: "Rejects unknown query parameters, a non-integer-text version, or an unrecognised format with 400 INVALID_REQUEST (issue #78).", parameters: [scenarioIdParameter, versionParameter, { name: "format", in: "query", schema: { type: "string", enum: ["json", "yaml"], default: "json" } }], responses: { "200": { description: "Canonical version export", content: { "application/json": { schema: { $ref: "#/components/schemas/ScenarioV1" } }, "application/yaml": { schema: { type: "string" } } } }, "400": { description: "INVALID_REQUEST — malformed scenarioId, version, or format, or unknown query parameter" }, "404": { description: "Not found" } } } },
+      "/api/v1/scenarios/validate": { post: { operationId: "validateScenario", requestBody: definitionBody(), responses: { "200": { description: "Validated scenario and content hash", content: { "application/json": { schema: { type: "object", required: ["valid", "scenarioId", "scenarioVersion", "schemaVersion", "contentHash"], properties: { valid: { const: true }, scenarioId: { type: "string" }, scenarioVersion: { type: "integer" }, schemaVersion: { const: 1 }, contentHash: { type: "string" } } } } } }, "400": { description: "Invalid scenario", ...apiErrorContent }, "415": { description: "UNSUPPORTED_MEDIA_TYPE — Content-Type is not application/json, application/yaml, application/x-yaml, or text/yaml (issue #77)", ...apiErrorContent } } } },
+      "/api/v1/scenarios/{scenarioId}/versions": { get: { operationId: "listScenarioVersions", description: "Rejects unknown query parameters, duplicate query keys, and non-integer-text limit/cursor values (decimals, scientific notation, empty strings) with 400 INVALID_REQUEST (issue #78).", parameters: [scenarioIdParameter, { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } }, { name: "cursor", in: "query", schema: { type: "integer", minimum: 1 } }], responses: { "200": { description: "Bounded immutable version history", content: { "application/json": { schema: { type: "object", required: ["items"], properties: { items: { type: "array", items: { $ref: "#/components/schemas/ScenarioSummary" } }, nextCursor: { type: "integer" } } } } } }, "400": { description: "INVALID_REQUEST — malformed scenarioId, limit, or cursor, or unknown query parameter", ...apiErrorContent }, "503": { description: "Persistence not enabled or unavailable", ...apiErrorContent } } } },
+      "/api/v1/scenarios/{scenarioId}/versions/{version}": { get: { operationId: "getScenarioVersion", description: "Rejects a non-integer-text version path segment with 400 INVALID_REQUEST (issue #78).", parameters: [scenarioIdParameter, versionParameter], responses: { "200": { description: "Exact immutable scenario version", content: { "application/json": { schema: { $ref: "#/components/schemas/ScenarioV1" } } } }, "400": { description: "INVALID_REQUEST — malformed scenarioId or version", ...apiErrorContent }, "404": { description: "Not found", ...apiErrorContent } } } },
+      "/api/v1/scenarios/{scenarioId}/versions/{version}/export": { get: { operationId: "exportScenarioVersion", description: "Rejects unknown query parameters, a non-integer-text version, or an unrecognised format with 400 INVALID_REQUEST (issue #78).", parameters: [scenarioIdParameter, versionParameter, { name: "format", in: "query", schema: { type: "string", enum: ["json", "yaml"], default: "json" } }], responses: { "200": { description: "Canonical version export", content: { "application/json": { schema: { $ref: "#/components/schemas/ScenarioV1" } }, "application/yaml": { schema: { type: "string" } } } }, "400": { description: "INVALID_REQUEST — malformed scenarioId, version, or format, or unknown query parameter", ...apiErrorContent }, "404": { description: "Not found", ...apiErrorContent } } } },
       "/api/v1/runs": {
         post: {
           operationId: "startCataloguedRun",
           summary: "Start a run from the catalogue",
           description: [
-            "Starts a run using a published or bundled scenario. Supports idempotency via the",
+            "Starts a run using a published or bundled scenario. Run reports are retained for the configured TTL and terminal reports may be evicted early when the bounded store reaches capacity.",
+            "Run creation uses a fixed-window per-client-IP limit configured by RUN_RATE_LIMIT_MAX and RATE_LIMIT_WINDOW_MS; requests over quota receive 429 RATE_LIMITED.",
+            "Supports idempotency via the",
             "Idempotency-Key header (issue #72): sending the same key with the same canonical",
             "request body within the retention window returns the original run without re-executing.",
             "Sending the same key with a different body returns 409 IDEMPOTENCY_CONFLICT.",
@@ -95,10 +100,12 @@ export function openApiDocument() {
           parameters: [idempotencyKeyHeader],
           requestBody: { required: true, content: { "application/json": { schema: runRequestSchema } } },
           responses: {
-            "202": { description: "Run accepted" },
-            "404": { description: "Scenario not found" },
-            "409": { description: "SCENARIO_VERSION_MISMATCH — bundled version differs from requested, or IDEMPOTENCY_CONFLICT — same key, different body" },
-            "503": { description: "IDEMPOTENCY_CAPACITY — idempotency store full" },
+            "202": { description: "Run accepted", content: { "application/json": { schema: { $ref: "#/components/schemas/RunReport" } } }, headers: rateLimitHeaders },
+            "400": { description: "Invalid request", ...apiErrorContent },
+            "404": { description: "Scenario not found", ...apiErrorContent },
+            "409": { description: "SCENARIO_VERSION_MISMATCH — bundled version differs from requested, or IDEMPOTENCY_CONFLICT — same key, different body", ...apiErrorContent },
+            "429": { description: "RATE_LIMITED — per-IP run creation quota exceeded", ...apiErrorContent, headers: rateLimitedHeaders },
+            "503": { description: "IDEMPOTENCY_CAPACITY or RUNNER_AT_CAPACITY", ...apiErrorContent },
           },
         },
       },
@@ -112,11 +119,12 @@ export function openApiDocument() {
           parameters: [idempotencyKeyHeader],
           requestBody: definitionBody(),
           responses: {
-            "202": { description: "Declarative run accepted" },
-            "400": { description: "Invalid scenario" },
-            "409": { description: "IDEMPOTENCY_CONFLICT — same key, different body" },
-            "415": { description: "UNSUPPORTED_MEDIA_TYPE — Content-Type is not application/json, application/yaml, application/x-yaml, or text/yaml (issue #77)" },
-            "503": { description: "IDEMPOTENCY_CAPACITY — idempotency store full" },
+            "202": { description: "Declarative run accepted", content: { "application/json": { schema: { $ref: "#/components/schemas/RunReport" } } }, headers: rateLimitHeaders },
+            "400": { description: "Invalid scenario", ...apiErrorContent },
+            "409": { description: "IDEMPOTENCY_CONFLICT — same key, different body", ...apiErrorContent },
+            "415": { description: "UNSUPPORTED_MEDIA_TYPE — Content-Type is not application/json, application/yaml, application/x-yaml, or text/yaml (issue #77)", ...apiErrorContent },
+            "429": { description: "RATE_LIMITED — per-IP run creation quota exceeded", ...apiErrorContent, headers: rateLimitedHeaders },
+            "503": { description: "IDEMPOTENCY_CAPACITY or RUNNER_AT_CAPACITY", ...apiErrorContent },
           },
         },
       },
@@ -137,13 +145,14 @@ export function openApiDocument() {
           responses: {
             "200": {
               description: "Run report",
+              content: { "application/json": { schema: { $ref: "#/components/schemas/RunReport" } } },
               headers: {
                 "ETag": { schema: { type: "string" }, description: "Fingerprint of the complete run representation; changes when any report field changes." },
                 "Cache-Control": { schema: { type: "string" }, description: "no-cache requires revalidation before reuse, including for active reports." },
               },
             },
             "304": { description: "Run report unchanged; no response body." },
-            "404": { description: "Not found" },
+            "404": { description: "Not found", ...apiErrorContent },
           },
         },
       },
@@ -155,21 +164,84 @@ export function openApiDocument() {
           responses: {
             "200": {
               description: "Final JSON report",
+              content: { "application/json": { schema: { $ref: "#/components/schemas/RunReport" } } },
               headers: {
                 "ETag": { schema: { type: "string" }, description: "Fingerprint of the complete report representation." },
                 "Cache-Control": { schema: { type: "string" }, description: "no-cache requires revalidation before reuse." },
               },
             },
             "304": { description: "Report unchanged; no response body." },
-            "409": { description: "Run incomplete" },
-            "404": { description: "Not found" },
+            "409": { description: "Run incomplete", ...apiErrorContent },
+            "404": { description: "Not found", ...apiErrorContent },
           },
         },
       },
     },
-    components: { schemas: { ScenarioV1: scenarioSchemaV1, CataloguedRunRequest: runRequestSchema } },
+    components: {
+      schemas: {
+        ScenarioV1: scenarioSchemaV1,
+        ScenarioSummary: {
+          type: "object",
+          required: ["id", "version", "name", "description", "contentHash"],
+          properties: {
+            id: { type: "string" },
+            version: { type: "integer" },
+            name: { type: "string" },
+            description: { type: "string" },
+            contentHash: { type: "string" },
+          },
+        },
+        CataloguedRunRequest: runRequestSchema,
+        RunReport: runReportSchemaV1,
+        StellarErrorCode: {
+          type: "string",
+          description: "Stable SoroLink error code. Raw Stellar protocol result codes remain available in stellarTransactionCode and stellarOperationCodes.",
+          enum: [
+            "STELLAR_OPERATION_FAILED", "STELLAR_UNAUTHORIZED", "STELLAR_SOURCE_ACCOUNT_NOT_FOUND",
+            "STELLAR_OPERATION_NOT_SUPPORTED", "STELLAR_TOO_MANY_SUBENTRIES", "STELLAR_WORK_LIMIT_EXCEEDED",
+            "STELLAR_TRUSTLINE_NOT_FOUND", "STELLAR_INSUFFICIENT_BALANCE", "STELLAR_TRUSTLINE_LIMIT_EXCEEDED",
+            "STELLAR_ISSUER_NOT_FOUND", "STELLAR_INSUFFICIENT_RESERVE", "STELLAR_ASSET_NOT_AUTHORIZED",
+            "STELLAR_MALFORMED_OPERATION", "STELLAR_DESTINATION_NOT_FOUND", "STELLAR_SOURCE_NOT_AUTHORIZED",
+            "STELLAR_SOURCE_TRUSTLINE_NOT_FOUND", "STELLAR_TRANSACTION_FAILED", "STELLAR_TRANSACTION_TOO_EARLY",
+            "STELLAR_TRANSACTION_TOO_LATE", "STELLAR_TRANSACTION_MISSING_OPERATION", "STELLAR_BAD_SEQUENCE",
+            "STELLAR_BAD_AUTHORIZATION", "STELLAR_INSUFFICIENT_FEE_BALANCE", "STELLAR_INSUFFICIENT_FEE",
+            "STELLAR_NETWORK_INTERNAL_ERROR", "STELLAR_TRANSACTION_NOT_SUPPORTED",
+          ],
+        },
+        ApiErrorEnvelope: {
+          type: "object",
+          required: ["error"],
+          properties: {
+            error: {
+              type: "object",
+              required: ["code", "message", "requestId", "details"],
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" },
+                requestId: { type: "string" },
+                details: { type: "array", items: { type: "string" }, maxItems: 50 },
+              },
+            },
+          },
+        },
+      },
+    },
   } as const;
 }
+
+const apiErrorContent = {
+  content: { "application/json": { schema: { $ref: "#/components/schemas/ApiErrorEnvelope" } } },
+} as const;
+
+const rateLimitHeaders = {
+  "X-RateLimit-Limit": { schema: { type: "integer" }, description: "Maximum requests allowed in the configured fixed window." },
+  "X-RateLimit-Remaining": { schema: { type: "integer" }, description: "Requests remaining in the current window." },
+} as const;
+
+const rateLimitedHeaders = {
+  ...rateLimitHeaders,
+  "Retry-After": { schema: { type: "integer" }, description: "Seconds until a rejected request can be retried." },
+} as const;
 
 const scenarioIdParameter = { name: "scenarioId", in: "path", required: true, schema: { type: "string", pattern: "^[a-z0-9-]+$" } } as const;
 const versionParameter = { name: "version", in: "path", required: true, schema: { type: "integer", minimum: 1 } } as const;

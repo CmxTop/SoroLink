@@ -333,6 +333,60 @@ const OPERATION_CODE_INTERPRETATIONS: Record<string, StellarErrorInterpretation>
   },
 };
 
+const STABLE_OPERATION_ERROR_CODES: Record<string, string> = {
+  op_inner: "STELLAR_OPERATION_FAILED",
+  op_bad_auth: "STELLAR_UNAUTHORIZED",
+  op_no_source_account: "STELLAR_SOURCE_ACCOUNT_NOT_FOUND",
+  op_not_supported: "STELLAR_OPERATION_NOT_SUPPORTED",
+  op_too_many_subentries: "STELLAR_TOO_MANY_SUBENTRIES",
+  op_exceeded_work_limit: "STELLAR_WORK_LIMIT_EXCEEDED",
+  op_no_trust: "STELLAR_TRUSTLINE_NOT_FOUND",
+  op_underfunded: "STELLAR_INSUFFICIENT_BALANCE",
+  op_line_full: "STELLAR_TRUSTLINE_LIMIT_EXCEEDED",
+  op_no_issuer: "STELLAR_ISSUER_NOT_FOUND",
+  op_low_reserve: "STELLAR_INSUFFICIENT_RESERVE",
+  op_not_authorized: "STELLAR_ASSET_NOT_AUTHORIZED",
+  op_malformed: "STELLAR_MALFORMED_OPERATION",
+  op_no_destination: "STELLAR_DESTINATION_NOT_FOUND",
+  op_src_not_authorized: "STELLAR_SOURCE_NOT_AUTHORIZED",
+  op_src_no_trust: "STELLAR_SOURCE_TRUSTLINE_NOT_FOUND",
+};
+
+const STABLE_TRANSACTION_ERROR_CODES: Record<string, string> = {
+  tx_failed: "STELLAR_TRANSACTION_FAILED",
+  tx_too_early: "STELLAR_TRANSACTION_TOO_EARLY",
+  tx_too_late: "STELLAR_TRANSACTION_TOO_LATE",
+  tx_missing_operation: "STELLAR_TRANSACTION_MISSING_OPERATION",
+  tx_bad_seq: "STELLAR_BAD_SEQUENCE",
+  tx_bad_auth: "STELLAR_BAD_AUTHORIZATION",
+  tx_insufficient_balance: "STELLAR_INSUFFICIENT_FEE_BALANCE",
+  tx_no_source_account: "STELLAR_SOURCE_ACCOUNT_NOT_FOUND",
+  tx_insufficient_fee: "STELLAR_INSUFFICIENT_FEE",
+  tx_internal_error: "STELLAR_NETWORK_INTERNAL_ERROR",
+  tx_not_supported: "STELLAR_TRANSACTION_NOT_SUPPORTED",
+};
+
+const STABLE_STELLAR_ERROR_CODES = new Set([
+  ...Object.values(STABLE_OPERATION_ERROR_CODES),
+  ...Object.values(STABLE_TRANSACTION_ERROR_CODES),
+]);
+
+/**
+ * Converts Horizon result codes to stable SoroLink codes while preserving the
+ * raw codes separately in reports for callers that need protocol-level detail.
+ */
+export function normalizeStellarResultCode(transactionCode: string, operationCodes: string[]): string {
+  for (const code of operationCodes) {
+    const stableCode = STABLE_OPERATION_ERROR_CODES[code];
+    if (stableCode) return stableCode;
+  }
+  return STABLE_TRANSACTION_ERROR_CODES[transactionCode] ?? "STELLAR_TRANSACTION_FAILED";
+}
+
+export function isStableStellarErrorCode(code: string): boolean {
+  return STABLE_STELLAR_ERROR_CODES.has(code);
+}
+
 /**
  * Get developer-friendly interpretation for a Stellar transaction result code.
  */

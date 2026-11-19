@@ -23,7 +23,15 @@ export class FixedWindowRateLimiter {
     this.removeExpired(now);
     let bucket = this.#buckets.get(key);
     if (!bucket) {
-      if (this.#buckets.size >= this.maxKeys) this.#buckets.delete(this.#buckets.keys().next().value as string);
+      if (this.#buckets.size >= this.maxKeys) {
+        let earliestResetAt = Number.POSITIVE_INFINITY;
+        for (const item of this.#buckets.values()) earliestResetAt = Math.min(earliestResetAt, item.resetAt);
+        return {
+          allowed: false,
+          remaining: 0,
+          retryAfterSeconds: Math.max(1, Math.ceil((earliestResetAt - now) / 1_000)),
+        };
+      }
       bucket = { count: 0, resetAt: now + this.windowMs };
       this.#buckets.set(key, bucket);
     }

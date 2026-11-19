@@ -21,6 +21,18 @@ describe("InMemoryRunStore resource bounds", () => {
     expect(store.get("finished")).toBeUndefined();
     expect(store.get("new")).toBeDefined();
   });
+
+  it("evicts the earliest-completed terminal run rather than the earliest-created run", () => {
+    const now = Date.parse("2026-08-09T00:01:00.000Z");
+    const store = new InMemoryRunStore(2, 60_000, () => now);
+    store.create(run("recently-finished", "passed", "2026-08-09T00:00:50.000Z"));
+    store.create(run("first-finished", "failed", "2026-08-09T00:00:10.000Z"));
+    store.create(run("new", "requested"));
+
+    expect(store.get("first-finished")).toBeUndefined();
+    expect(store.get("recently-finished")).toBeDefined();
+    expect(store.get("new")).toBeDefined();
+  });
 });
 
 function run(id: string, status: RunReport["status"], completedAt?: string): RunReport {
